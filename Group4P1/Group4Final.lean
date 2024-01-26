@@ -1,11 +1,14 @@
+--小组成员：胥天乐，闵圣骐，彭煜杰，戴其铭
 import Init.Prelude
 import Mathlib.Data.Matrix.Basic
+import Mathlib.Data.Finset.Pointwise
 import Mathlib.Data.Real.Basic
 import Mathlib.Data.Matrix.RowCol
 import Mathlib.Data.Matrix.Block
 import Mathlib.LinearAlgebra.Matrix.Determinant
 import Mathlib.LinearAlgebra.Matrix.Block
 import Mathlib.LinearAlgebra.Matrix.PosDef
+import Mathlib.Analysis.Matrix
 
 
 
@@ -15,13 +18,13 @@ variable {n : Type*} [DecidableEq n] [Fintype n]
 
 set_option maxHeartbeats 20000000
 
-
 -- The BFGS update function could be defined in terms of these operations.
 def Bsucc (B: Matrix n n ℝ  )(s y : Matrix n (Fin 1) ℝ  ): Matrix n n ℝ   :=
   B - (1/(sᵀ  * B * s) 0 0) • (B * s * sᵀ * B) + (1/(yᵀ * s) 0 0) • (y * yᵀ)
 
 def norm2 (v : Matrix n (Fin 1) ℝ ) : ℝ  :=
   (vᵀ * v) 0 0
+
 
 -- Theorems would be stated using these definitions.
 theorem trace_BFGS_update {B : Matrix n n ℝ } {s y : Matrix n (Fin 1) ℝ } (h : Bᵀ = B):
@@ -33,8 +36,7 @@ theorem trace_BFGS_update {B : Matrix n n ℝ } {s y : Matrix n (Fin 1) ℝ } (h
       = (norm2 (B * s)) * (1 / (sᵀ * B * s) 0 0) := by
         have : trace (B * s * sᵀ * B) = norm2 (B*s) :=by
           rw[trace_mul_comm,← Matrix.mul_assoc,trace_mul_comm,← Matrix.mul_assoc]
-          have : sᵀ * B = (B * s)ᵀ :=by
-            rw[Matrix.transpose_mul,h]
+          have : sᵀ * B = (B * s)ᵀ :=by rw[Matrix.transpose_mul,h]
           rw[this]
           unfold trace;unfold norm2;simp
         rw[this]
@@ -146,18 +148,45 @@ theorem lemma2 (u v x y : Matrix n (Fin 1) ℝ) (h : det (1 + vᵀ * u) ≠ 0) :
         unfold IsUnit;simp;by_contra h';apply h;rw[Matrix.det_fin_one];exact h'
       rw[this]
 
+
+variable(zero':(Fin 1))
+def f (v : Matrix n (Fin 1) ℝ)(x : n) := v x 0
+variable (x : Matrix n (Fin 1) ℝ)
+#check f x
+theorem Pos1 {B : Matrix n n ℝ } (h : PosDef B):
+    ∀ x : Matrix n (Fin 1) ℝ, x ≠ 0 → ((xᵀ * B * x) 0 0) > 0 :=by
+      rcases h with ⟨h1,h2⟩
+      intro x xnozero
+      specialize h2 (f x)
+      have : f x ≠ 0 :=by
+        by_contra h
+        apply xnozero
+        apply Matrix.ext_iff.mp;unfold f at h;intro i j;simp
+        have g: (fun x_1 => x x_1 0) i = 0 :=by
+          rw[h];simp
+        simp at g
+        have : j = 0 :=by
+          apply Fin.fin_one_eq_zero
+        rw[this]
+        exact g
+      have h': 0 < star (f x) ⬝ᵥ mulVec B (f x) :=by apply h2 this
+      have h'' : ((xᵀ * B * x) 0 0) = star (f x) ⬝ᵥ mulVec B (f x) :=by
+        simp;unfold dotProduct;sorry
+      sorry
+
 theorem det_BFGS_update {B : Matrix n n ℝ } {s y : Matrix n (Fin 1) ℝ }
-    (h1 : Bᵀ = B)(h2 : (yᵀ * s) 0 0 > (0:ℝ))
-    (h3 : PosDef B)(g1: ∀ x : Matrix n (Fin 1) ℝ, x ≠ 0 → ((xᵀ * B * x) 0 0) > 0):
+    (h1 : PosDef B)(h2 : (yᵀ * s) 0 0 > (0:ℝ)):
     det (Bsucc B s y) = (det B) * ((yᵀ * s) 0 0) / ((sᵀ * B * s) 0 0):= by
-      have Bdetpos : 0 < det B := by exact Matrix.PosDef.det_pos h3
+      have Bsymm : Bᵀ = B :=by apply Matrix.PosDef.isHermitian;apply h1
+      have g1 : ∀ x : Matrix n (Fin 1) ℝ, x ≠ 0 → ((xᵀ * B * x) 0 0) > 0 :=by apply Pos1 h1
+      have Bdetpos : 0 < det B := by exact Matrix.PosDef.det_pos h1
       have detB_unit : IsUnit (det B) := by unfold IsUnit;simp;by_contra h';linarith [Bdetpos]
       have Binv : Invertible B := by apply Matrix.invertibleOfIsUnitDet B detB_unit
       have B_inv_symm : B⁻¹ᵀ = B⁻¹ := by
         have : B⁻¹ = ⅟B := by
           simp
         rw[this];rw[Matrix.transpose_invOf]
-        simp;rw[h1]
+        simp;rw[Bsymm]
       have g : (yᵀ * s) 0 0 = (sᵀ * y) 0 0 :=by
         rw[← Matrix.det_fin_one (yᵀ * s)];rw[← Matrix.det_fin_one (sᵀ * y)]
         have : (yᵀ * s)ᵀ = sᵀ * y :=by rw[Matrix.transpose_mul];simp
@@ -215,7 +244,7 @@ theorem det_BFGS_update {B : Matrix n n ℝ } {s y : Matrix n (Fin 1) ℝ }
           unfold Bsucc;simp
           rw[← Matrix.mul_assoc B (B⁻¹ * y) yᵀ,← Matrix.mul_assoc,Matrix.mul_nonsing_inv,← g]
           simp
-          rw[h1, add_assoc];rw[add_comm,add_assoc,neg_add_eq_sub,← add_sub_assoc,add_comm]
+          rw[Bsymm, add_assoc];rw[add_comm,add_assoc,neg_add_eq_sub,← add_sub_assoc,add_comm]
           have : B * (s * (sᵀ * B)) = B * s * sᵀ * B := by
             symm;rw[Matrix.mul_assoc,Matrix.mul_assoc]
           rw[this,add_sub_right_comm]
@@ -226,7 +255,7 @@ theorem det_BFGS_update {B : Matrix n n ℝ } {s y : Matrix n (Fin 1) ℝ }
         - ((yᵀ * x) 0 0) * ((zᵀ * u) 0 0)
         = ((yᵀ * s) 0 0) / ((sᵀ * B * s) 0 0) := by
         have : (((1 : Matrix (Fin 1) (Fin 1) ℝ ) + zᵀ * x) 0 0) = 0 :=by
-          simp;rw[h1]
+          simp;rw[Bsymm]
           have g2 : s ≠ 0 :=by
             by_contra g3;rw[g3] at h2;rw[Matrix.mul_zero] at h2;simp at h2
           specialize g1 s g2
@@ -234,7 +263,7 @@ theorem det_BFGS_update {B : Matrix n n ℝ } {s y : Matrix n (Fin 1) ℝ }
         rw[this];rw[mul_zero]
         simp
         have : ((sᵀ * y) 0 0)⁻¹ * (sᵀ * Bᵀ * (B⁻¹ * y)) 0 0 = 1 :=by
-          rw[h1];rw[Matrix.mul_assoc sᵀ B (B⁻¹ * y)];rw[← Matrix.mul_assoc B B⁻¹ y]
+          rw[Bsymm];rw[Matrix.mul_assoc sᵀ B (B⁻¹ * y)];rw[← Matrix.mul_assoc B B⁻¹ y]
           rw[Matrix.mul_nonsing_inv, Matrix.one_mul,inv_mul_cancel]
           rw[← g];linarith;exact detB_unit
         rw[this, mul_one]
